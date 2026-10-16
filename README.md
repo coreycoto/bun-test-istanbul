@@ -5,9 +5,25 @@ Instrument ESM JavaScript and TypeScript before Bun loads them, retain separate
 counters for isolated contexts and awaited Bun subprocesses, and generate
 standard Istanbul JSON, LCOV, HTML, or text reports.
 
-This is an initial implementation, tested locally with **Bun 1.4.3 on macOS**.
-The CI workflow also selects Linux; hosted results are a separate verification.
-There is no npm release yet. The repository's existing MIT license applies.
+This is an initial beta for **Bun 1.4.3**, checked on macOS and Linux. It is
+distributed through GitHub Releases under the MIT license.
+
+## Install a released version
+
+For the `v0.1.0-beta.1` release, once published:
+
+```sh
+bun add --dev \
+  bun-test-istanbul@https://github.com/coreycoto/bun-test-istanbul/releases/download/v0.1.0-beta.1/bun-test-istanbul-0.1.0-beta.1.tgz
+```
+
+This installs the CLI and API as a normal development dependency. No registry
+configuration, npm publication, build step, or install script is required.
+The asset must be a published release in a public repository for anonymous
+installation. The versioned URL pins the release; change it to upgrade.
+
+Each release includes `SHA256SUMS`, source identity in `release.json`, release
+notes, and the tested package tarball. See [release procedures](RELEASING.md).
 
 ## Install from source
 
@@ -23,7 +39,7 @@ bun pm pack --destination .tmp
 In a consuming project, install the resulting local tarball:
 
 ```sh
-bun add --dev /absolute/path/to/bun-test-istanbul-0.1.0.tgz
+bun add --dev /absolute/path/to/bun-test-istanbul-0.1.0-beta.1.tgz
 ```
 
 ## Run coverage

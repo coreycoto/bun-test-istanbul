@@ -21,4 +21,7 @@ jobs:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile --ignore-scripts
       - run: bun run check
-      - run: bun run pack:check
+      - name: Prepare and test versioned package
+        run: bun run release:prepare --out-dir="$RUNNER_TEMP/release-assets"
+      - name: Verify prepared assets and fresh installation
+        run: bun run release:verify --assets-dir="$RUNNER_TEMP/release-assets"
