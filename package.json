@@ -1,0 +1,65 @@
+{
+  "name": "bun-test-istanbul",
+  "version": "0.1.0",
+  "description": "Original-source Istanbul coverage for bun test, including isolated files and awaited Bun subprocesses.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Corey Coto",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/coreycoto/bun-test-istanbul.git"
+  },
+  "homepage": "https://github.com/coreycoto/bun-test-istanbul#readme",
+  "bugs": {
+    "url": "https://github.com/coreycoto/bun-test-istanbul/issues"
+  },
+  "keywords": [
+    "bun",
+    "bun-test",
+    "istanbul",
+    "coverage",
+    "typescript",
+    "lcov"
+  ],
+  "engines": {
+    "bun": ">=1.4.3"
+  },
+  "packageManager": "bun@1.4.3",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./preload": "./src/preload.ts"
+  },
+  "bin": {
+    "bun-test-istanbul": "./src/cli.ts"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "bun test ./tests --timeout 30000",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "check": "bun run lint && bun run typecheck && bun run test",
+    "pack:check": "bun scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "istanbul-lib-coverage": "3.2.2",
+    "istanbul-lib-instrument": "6.0.3",
+    "istanbul-lib-report": "3.0.1",
+    "istanbul-reports": "3.2.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.15",
+    "@types/bun": "1.4.2",
+    "@types/istanbul-lib-coverage": "2.0.6",
+    "@types/istanbul-lib-instrument": "1.7.8",
+    "@types/istanbul-lib-report": "3.0.3",
+    "@types/istanbul-reports": "3.0.4",
+    "typescript": "6.0.2"
+  }
+}
