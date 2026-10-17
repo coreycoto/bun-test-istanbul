@@ -5,10 +5,13 @@ import { join, resolve } from "node:path";
 import type { CoverageMapData } from "istanbul-lib-coverage";
 import {
   type CoverageRun,
+  forkCoverage,
   prepareCoverage,
   readCoverageRun,
   reportCoverage,
+  verifySources,
 } from "../src/index.ts";
+import { sourceDigest } from "../src/run.ts";
 
 const repo = resolve(import.meta.dir, "..");
 const cli = join(repo, "src/cli.ts");
@@ -446,4 +449,162 @@ test("explicit CommonJS inventories are rejected before execution", () => {
   expect(() => prepareCoverage({ root, include: ["src/**/*.cjs"] })).toThrow(
     "CommonJS sources are not supported",
   );
+});
+
+function executePrepared(run: CoverageRun, testFile: string) {
+  const config = join(run.directory, "bunfig.toml");
+  writeFileSync(config, "# Explicit fixture configuration\n", { flag: "wx" });
+  const result = Bun.spawnSync(
+    [
+      process.execPath,
+      "--no-env-file",
+      "test",
+      `--config=${config}`,
+      "--preload",
+      join(repo, "src/preload.ts"),
+      "--parallel=1",
+      "--max-concurrency=1",
+      testFile,
+    ],
+    {
+      cwd: run.manifest.root,
+      env: {
+        PATH: process.env.PATH,
+        TMPDIR: process.env.TMPDIR,
+        BUN_TEST_ISTANBUL_MANIFEST: run.manifestPath,
+        BUN_TEST_ISTANBUL_MANIFEST_SHA256: run.manifestSha256,
+      },
+      stdout: "pipe",
+      stderr: "pipe",
+      timeout: 10000,
+    },
+  );
+  writeFileSync(join(run.directory, "stdout.log"), result.stdout);
+  writeFileSync(join(run.directory, "stderr.log"), result.stderr);
+  expect(result.exitCode).toBe(0);
+  reportCoverage({ manifestPath: run.manifestPath, reporters: ["json"] });
+  return coverage(run.directory);
+}
+
+test("forked preparation keeps fresh counters, maps, identities and independent raw directories", () => {
+  const root = fixture();
+  writeFileSync(
+    join(root, "tests/b.test.ts"),
+    'import {test,expect} from "bun:test"; import {choose} from "../src/logic.ts"; test("beta",()=>expect(choose("beta")).toBe("B"));',
+  );
+  const base = prepareCoverage({ root });
+  const alpha = executePrepared(base, "./tests/a.test.ts");
+  const fork = forkCoverage({
+    manifestPath: base.manifestPath,
+    expectedHash: base.manifestSha256,
+  });
+  expect(fork.manifest.schemaVersion).toBe(2);
+  expect(fork.manifest.runId).not.toBe(base.manifest.runId);
+  expect(fork.manifest.variable).toBe(base.manifest.variable);
+  expect(readdirSync(join(fork.directory, "raw"))).toEqual([]);
+  const beta = executePrepared(fork, "./tests/b.test.ts");
+  const independent = executePrepared(
+    prepareCoverage({ root }),
+    "./tests/b.test.ts",
+  );
+  expect(beta).toEqual(independent);
+  const logic = beta[join(root, "src/logic.ts")];
+  const id = Object.keys(logic.fnMap).find(
+    (key) => logic.fnMap[key].name === "choose",
+  );
+  expect(logic.f[id ?? "missing"]).toBe(1);
+  expect(logic.b).not.toEqual(alpha[join(root, "src/logic.ts")].b);
+  const nested = forkCoverage({
+    manifestPath: fork.manifestPath,
+    expectedHash: fork.manifestSha256,
+  });
+  expect(
+    nested.manifest.schemaVersion === 2 && nested.manifest.preparationId,
+  ).toBe(base.manifest.runId);
+  expect(nested.manifest.runId).not.toBe(fork.manifest.runId);
+  expect(executePrepared(nested, "./tests/a.test.ts")).toEqual(alpha);
+  const raw = readdirSync(join(base.directory, "raw"))[0];
+  writeFileSync(
+    join(fork.directory, "raw", raw),
+    readFileSync(join(base.directory, "raw", raw)),
+  );
+  expect(() =>
+    reportCoverage({
+      manifestPath: fork.manifestPath,
+      reporters: ["json"],
+      reportDir: join(fork.directory, "foreign-report"),
+    }),
+  ).toThrow("identity mismatch");
+});
+
+test("forking rejects changed preparation, source, seed, manifest and runtime before reuse", () => {
+  for (const fault of ["source", "prepared", "seed", "manifest", "runtime"]) {
+    const run = prepareCoverage({ root: fixture() });
+    if (fault === "source")
+      writeFileSync(
+        join(run.manifest.root, "src/logic.ts"),
+        "export const drift=1;",
+      );
+    if (fault === "prepared") {
+      const path = join(run.directory, run.manifest.sources[0].artifact);
+      const { unlinkSync } = require("node:fs") as typeof import("node:fs");
+      unlinkSync(path);
+      writeFileSync(path, "bad");
+    }
+    if (fault === "seed") writeFileSync(join(run.directory, "seed.json"), "{}");
+    if (fault === "manifest") writeFileSync(run.manifestPath, "{}");
+    if (fault === "runtime") {
+      run.manifest.bunVersion = "other";
+      writeFileSync(run.manifestPath, JSON.stringify(run.manifest));
+      run.manifestSha256 = sourceDigest(run.manifestPath);
+    }
+    expect(() =>
+      forkCoverage({
+        manifestPath: run.manifestPath,
+        expectedHash: run.manifestSha256,
+      }),
+    ).toThrow();
+  }
+});
+
+test("fork copies immutable preparation without sharing writable inodes or accepting malformed lineage", () => {
+  const base = prepareCoverage({ root: fixture() });
+  const fork = forkCoverage({
+    manifestPath: base.manifestPath,
+    expectedHash: base.manifestSha256,
+  });
+  const { chmodSync } = require("node:fs") as typeof import("node:fs");
+  const path = join(fork.directory, fork.manifest.sources[0].artifact);
+  chmodSync(path, 0o600);
+  writeFileSync(path, "changed fork");
+  expect(() => verifySources(base)).not.toThrow();
+  expect(() => verifySources(fork)).toThrow("instrumentation changed");
+  const clean = forkCoverage({
+    manifestPath: base.manifestPath,
+    expectedHash: base.manifestSha256,
+  });
+  if (clean.manifest.schemaVersion !== 2)
+    throw new Error("Expected fork manifest");
+  clean.manifest.preparationId = randomUUID();
+  writeFileSync(clean.manifestPath, JSON.stringify(clean.manifest));
+  expect(() => readCoverageRun(clean.manifestPath)).toThrow(
+    "Invalid Istanbul coverage manifest",
+  );
+  expect(() =>
+    forkCoverage({ manifestPath: base.manifestPath, expectedHash: "" }),
+  ).toThrow("expected manifest SHA-256");
+});
+
+test("the low-level hook also refuses two invocation identities in one global", () => {
+  const base = prepareCoverage({ root: fixture() });
+  const fork = forkCoverage({
+    manifestPath: base.manifestPath,
+    expectedHash: base.manifestSha256,
+  });
+  const { createCoverageCollector } =
+    require("../src/index.ts") as typeof import("../src/index.ts");
+  createCoverageCollector(base.manifestPath, base.manifestSha256);
+  expect(() =>
+    createCoverageCollector(fork.manifestPath, fork.manifestSha256),
+  ).toThrow("fresh global context");
 });

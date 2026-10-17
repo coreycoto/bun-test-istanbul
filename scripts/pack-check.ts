@@ -24,7 +24,9 @@ const consumer = join(scratch, "consumer with spaces");
 const version = JSON.parse(
   await Bun.file(join(root, "package.json")).text(),
 ).version;
-const result = checkConsumer(`file:${tarball}`, consumer, version, tarball);
+const result = checkConsumer(`file:${tarball}`, consumer, version, tarball, {
+  verifyFork: true,
+});
 writeFileSync(
   join(scratch, "consumer-check.json"),
   `${JSON.stringify(result, null, 2)}\n`,

@@ -183,3 +183,25 @@ Related prior art: [bun-plugin-istanbul](https://github.com/hedaukartik/bun-plug
 documents build-time instrumentation and a Playwright workflow. This project
 focuses on the `bun test` runtime and capture lifecycle; it does not claim to be
 the first Bun/Istanbul integration.
+
+### Unreleased: reuse prepared instrumentation
+
+The working source adds `forkCoverage({ manifestPath, expectedHash, outputDir })`.
+Prepare once with `prepareCoverage`, then fork another invocation from its exact
+manifest hash. This API is not included in the published `0.1.0-beta.1` archive.
+
+A fork copies only verified immutable prepared text and the zero-counter seed,
+using filesystem copy-on-write when available and a byte-copy fallback. It never
+copies raw captures, reports, or a prior test outcome. Each fork has a fresh run
+ID, manifest hash and raw directory. Schema v2 binds its shared preparation ID
+and donor manifest hash; the loader still accepts v1 fresh preparations. Existing
+v1-only loaders reject the new manifest, so use a matching collector and preload.
+
+Counter namespaces may be shared only across separate fresh Bun contexts. The
+registration guard refuses switching invocations within an already registered
+global. Run each selected test file in its own process, preserve awaited-child
+ownership, and let the consumer verify discovery, outcomes and child completeness.
+Forking does not establish test success or qualify missing/crashed captures.
+Changed source bytes, preparation, seeds, manifests or Bun versions refuse reuse.
+Preparation files have separate inodes; changing one fork cannot change another.
+No persistent cross-checkout cache, eviction policy or automatic retry is added.
