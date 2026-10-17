@@ -46,7 +46,7 @@ jobs:
             "$RUNNER_TEMP/release-assets/release.json" \
             "$RUNNER_TEMP/release-assets/SHA256SUMS" \
             --target "$release_sha" --draft "${flags[@]}" \
-            --title "bun-test-istanbul $release_tag" --notes-file CHANGELOG.md
+            --title "bun-test-istanbul $release_tag" --notes-file RELEASE_NOTES.md
           gh release download "$release_tag" --dir "$RUNNER_TEMP/downloaded-assets"
       - name: Verify downloaded draft assets and installed consumer
         run: bun run release:verify --assets-dir="$RUNNER_TEMP/downloaded-assets"

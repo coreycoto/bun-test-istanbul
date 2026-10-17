@@ -8,7 +8,6 @@
   Every invocation keeps its own run ID, manifest hash and raw directory.
 - Refuse sharing a preparation namespace across invocations in the same global
   context. Changed source, prepared artifacts, seeds and Bun versions refuse reuse.
-- Verify the installed fork API when preparing and checking release assets.
 
 Fresh v1 manifests remain supported. Forks use schema v2 and require the matching
 collector/preload; v1-only readers reject them. Prepared reuse requires separate
