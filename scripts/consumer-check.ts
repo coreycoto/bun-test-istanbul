@@ -30,6 +30,7 @@ export function checkConsumer(
   consumer: string,
   expectedVersion: string,
   expectedTarball?: string,
+  options: { verifyFork?: boolean } = {},
 ) {
   if (existsSync(consumer))
     throw new Error("Consumer verification requires a fresh directory");
@@ -111,17 +112,21 @@ export function checkConsumer(
   );
   writeFileSync(
     join(consumer, "programmatic.ts"),
-    `import {prepareCoverage,reportCoverage,MANIFEST_ENV,MANIFEST_HASH_ENV} from "bun-test-istanbul";
-const run=prepareCoverage();
+    `import {prepareCoverage,reportCoverage,MANIFEST_ENV,MANIFEST_HASH_ENV${options.verifyFork ? ",forkCoverage" : ""}} from "bun-test-istanbul";
+const prepared=prepareCoverage();
+const invocations=[prepared];
+${options.verifyFork ? "invocations.push(forkCoverage({manifestPath:prepared.manifestPath,expectedHash:prepared.manifestSha256}));" : ""}
+for (const run of invocations) {
 const result=Bun.spawnSync([process.execPath,"--no-env-file","test","--preload","bun-test-istanbul/preload","./tests"],{
  env:{...process.env,[MANIFEST_ENV]:run.manifestPath,[MANIFEST_HASH_ENV]:run.manifestSha256},stdout:"inherit",stderr:"inherit"
 });
 if(result.exitCode!==0) throw new Error("Programmatic consumer tests failed");
-reportCoverage({manifestPath:run.manifestPath,reporters:["json"]});`,
+reportCoverage({manifestPath:run.manifestPath,reporters:["json"]});
+}`,
   );
   command([process.execPath, "--no-env-file", "./programmatic.ts"], consumer);
   const runs = readdirSync(join(consumer, "coverage/istanbul"));
-  if (runs.length !== 2)
+  if (runs.length !== (options.verifyFork ? 3 : 2))
     throw new Error("Expected distinct CLI and API coverage runs");
   for (const run of runs) {
     const data = JSON.parse(
@@ -145,6 +150,7 @@ reportCoverage({manifestPath:run.manifestPath,reporters:["json"]});`,
     version: installed.version,
     installedCLI: true,
     installedProgrammaticAPI: true,
+    installedForkAPI: options.verifyFork ?? false,
     coverageRuns: runs.length,
   };
 }

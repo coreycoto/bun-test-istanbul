@@ -35,6 +35,14 @@ export function createCoverageCollector(
   const run = readCoverageRun(manifestPath, expectedHash);
   if (run.manifest.bunVersion !== Bun.version)
     throw new Error("Coverage Bun runtime differs from preparation");
+  const globals = globalThis as unknown as Record<symbol, Map<string, string>>;
+  const key = Symbol.for("bun-test-istanbul.namespace-owners");
+  globals[key] ??= new Map<string, string>();
+  const owners = globals[key];
+  const owner = owners.get(run.manifest.variable);
+  if (owner !== undefined && owner !== run.manifestSha256)
+    throw new Error("Prepared reuse requires a fresh global context");
+  owners.set(run.manifest.variable, run.manifestSha256);
   const expected = new Map(
     run.manifest.sources.map((source) => [
       resolve(run.manifest.root, source.path),

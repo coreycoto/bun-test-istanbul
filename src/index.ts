@@ -9,10 +9,12 @@ export { REPORTERS, reportCoverage } from "./report.ts";
 export type {
   CoverageOptions,
   CoverageRun,
+  ForkCoverageOptions,
   RunManifest,
   SourceRecord,
 } from "./run.ts";
 export {
+  forkCoverage,
   MANIFEST_ENV,
   MANIFEST_HASH_ENV,
   prepareCoverage,

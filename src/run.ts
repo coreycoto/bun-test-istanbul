@@ -1,5 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
+  chmodSync,
+  constants,
+  copyFileSync,
   mkdirSync,
   readFileSync,
   realpathSync,
@@ -42,8 +45,7 @@ export interface SourceRecord {
   artifact: string;
   artifactSha256: string;
 }
-export interface RunManifest {
-  schemaVersion: 1;
+interface ManifestFields {
   runId: string;
   root: string;
   generator: string;
@@ -51,6 +53,20 @@ export interface RunManifest {
   variable: string;
   sources: SourceRecord[];
   seedSha256: string;
+}
+export type RunManifest = ManifestFields &
+  (
+    | { schemaVersion: 1 }
+    | {
+        schemaVersion: 2;
+        preparationId: string;
+        preparedFromManifestSha256: string;
+      }
+  );
+export interface ForkCoverageOptions {
+  manifestPath: string;
+  expectedHash: string;
+  outputDir?: string;
 }
 export interface CoverageRun {
   manifestPath: string;
@@ -197,13 +213,22 @@ export function readCoverageRun(
   if (expectedHash && expectedHash !== manifestSha256)
     throw new Error("Coverage manifest changed");
   const manifest = JSON.parse(bytes.toString()) as RunManifest;
+  const preparationId =
+    manifest.schemaVersion === 2 ? manifest.preparationId : manifest.runId;
   if (
-    manifest.schemaVersion !== 1 ||
+    ![1, 2].includes(manifest.schemaVersion) ||
     manifest.generator !== GENERATOR ||
     !/^[a-f0-9-]{36}$/.test(manifest.runId) ||
     !isAbsolute(manifest.root) ||
+    typeof preparationId !== "string" ||
+    !/^[a-f0-9-]{36}$/.test(preparationId) ||
+    (manifest.schemaVersion === 2 &&
+      !/^[a-f0-9]{64}$/.test(manifest.preparedFromManifestSha256)) ||
+    (manifest.schemaVersion === 1 &&
+      ("preparationId" in manifest ||
+        "preparedFromManifestSha256" in manifest)) ||
     manifest.variable !==
-      `__bun_test_istanbul_${manifest.runId.replaceAll("-", "")}__` ||
+      `__bun_test_istanbul_${preparationId.replaceAll("-", "")}__` ||
     !Array.isArray(manifest.sources) ||
     !manifest.sources.length ||
     new Set(manifest.sources.map((source) => source.path)).size !==
@@ -230,6 +255,56 @@ export function readCoverageRun(
   if (sourceDigest(join(directory, "seed.json")) !== manifest.seedSha256)
     throw new Error("Coverage seed changed");
   return { manifestPath: path, directory, manifest, manifestSha256 };
+}
+
+/** Reuse only immutable preparation; raw captures, reports and run identity are fresh. */
+export function forkCoverage(options: ForkCoverageOptions): CoverageRun {
+  if (!/^[a-f0-9]{64}$/.test(options.expectedHash))
+    throw new Error("Fork requires an expected manifest SHA-256");
+  const source = readCoverageRun(options.manifestPath, options.expectedHash);
+  if (source.manifest.bunVersion !== Bun.version)
+    throw new Error("Coverage Bun runtime differs from preparation");
+  verifySources(source);
+  const runId = randomUUID();
+  const output = resolve(
+    source.manifest.root,
+    options.outputDir ?? "coverage/istanbul",
+  );
+  const directory = join(output, runId);
+  mkdirSync(output, { recursive: true });
+  mkdirSync(directory);
+  mkdirSync(join(directory, "prepared"));
+  mkdirSync(join(directory, "raw"));
+  // Prefer copy-on-write when supported, with a byte-copy fallback. Never share
+  // writable inodes: replacing/changing one fork must not mutate another run.
+  for (const path of [
+    "seed.json",
+    ...source.manifest.sources.map((s) => s.artifact),
+  ]) {
+    const target = join(directory, path);
+    copyFileSync(
+      join(source.directory, path),
+      target,
+      constants.COPYFILE_EXCL | constants.COPYFILE_FICLONE,
+    );
+    chmodSync(target, 0o400);
+  }
+  const manifest: RunManifest = {
+    ...source.manifest,
+    schemaVersion: 2,
+    runId,
+    preparationId:
+      source.manifest.schemaVersion === 2
+        ? source.manifest.preparationId
+        : source.manifest.runId,
+    preparedFromManifestSha256: source.manifestSha256,
+  };
+  const manifestPath = join(directory, "manifest.json");
+  writeJson(manifestPath, manifest);
+  const run = readCoverageRun(manifestPath);
+  verifySources(source);
+  verifySources(run);
+  return run;
 }
 
 export function verifySources(run: CoverageRun): void {

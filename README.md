@@ -5,16 +5,16 @@ Instrument ESM JavaScript and TypeScript before Bun loads them, retain separate
 counters for isolated contexts and awaited Bun subprocesses, and generate
 standard Istanbul JSON, LCOV, HTML, or text reports.
 
-This is an initial beta for **Bun 1.4.3**, checked on macOS and Linux. It is
+This beta targets **Bun 1.4.3** on macOS and Linux. It is
 distributed through GitHub Releases under the MIT license.
 
 ## Install a released version
 
-For the `v0.1.0-beta.1` release, once published:
+For the `v0.1.0-beta.2` release, once published:
 
 ```sh
 bun add --dev \
-  bun-test-istanbul@https://github.com/coreycoto/bun-test-istanbul/releases/download/v0.1.0-beta.1/bun-test-istanbul-0.1.0-beta.1.tgz
+  bun-test-istanbul@https://github.com/coreycoto/bun-test-istanbul/releases/download/v0.1.0-beta.2/bun-test-istanbul-0.1.0-beta.2.tgz
 ```
 
 This installs the CLI and API as a normal development dependency. No registry
@@ -39,7 +39,7 @@ bun pm pack --destination .tmp
 In a consuming project, install the resulting local tarball:
 
 ```sh
-bun add --dev /absolute/path/to/bun-test-istanbul-0.1.0-beta.1.tgz
+bun add --dev /absolute/path/to/bun-test-istanbul-0.1.0-beta.2.tgz
 ```
 
 ## Run coverage
@@ -183,3 +183,25 @@ Related prior art: [bun-plugin-istanbul](https://github.com/hedaukartik/bun-plug
 documents build-time instrumentation and a Playwright workflow. This project
 focuses on the `bun test` runtime and capture lifecycle; it does not claim to be
 the first Bun/Istanbul integration.
+
+### Reuse prepared instrumentation (beta.2)
+
+Beta.2 adds `forkCoverage({ manifestPath, expectedHash, outputDir })`.
+Prepare once with `prepareCoverage`, then fork another invocation from its exact
+manifest hash. This API is not included in the published `0.1.0-beta.1` archive.
+
+A fork copies only verified immutable prepared text and the zero-counter seed,
+using filesystem copy-on-write when available and a byte-copy fallback. It never
+copies raw captures, reports, or a prior test outcome. Each fork has a fresh run
+ID, manifest hash and raw directory. Schema v2 binds its shared preparation ID
+and donor manifest hash; the loader still accepts v1 fresh preparations. Existing
+v1-only loaders reject the new manifest, so use a matching collector and preload.
+
+Counter namespaces may be shared only across separate fresh Bun contexts. The
+registration guard refuses switching invocations within an already registered
+global. Run each selected test file in its own process, preserve awaited-child
+ownership, and let the consumer verify discovery, outcomes and child completeness.
+Forking does not establish test success or qualify missing/crashed captures.
+Changed source bytes, preparation, seeds, manifests or Bun versions refuse reuse.
+Preparation files have separate inodes; changing one fork cannot change another.
+No persistent cross-checkout cache, eviction policy or automatic retry is added.

@@ -8,6 +8,9 @@ still install from their normal package registry.
 
 1. Review the source and compatibility notes. Update `package.json`, `bun.lock`,
    `CHANGELOG.md`, and the README install example for the intended version.
+   Write `RELEASE_NOTES.md` for the current version only: useful changes,
+   installation and compatibility. Review that exact public body; the workflow
+   uses it instead of copying the full development changelog.
 2. Merge the reviewed candidate and verify its exact main CI. Keep source and
    assets tied to that revision; an older green candidate is insufficient.
 3. Run the **GitHub Releases** workflow manually against the reviewed ref. It
