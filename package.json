@@ -1,6 +1,6 @@
 {
   "name": "bun-test-istanbul",
-  "version": "0.1.0-beta.1",
+  "version": "0.1.0-beta.2",
   "description": "Original-source Istanbul coverage for bun test, including isolated files and awaited Bun subprocesses.",
   "type": "module",
   "license": "MIT",

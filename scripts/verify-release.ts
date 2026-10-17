@@ -61,6 +61,7 @@ const result = checkConsumer(
   join(scratch, "consumer with spaces"),
   identity.version,
   join(local ?? scratch, identity.filename),
+  { verifyFork: true },
 );
 const receipt = {
   sourceCommit: commit,

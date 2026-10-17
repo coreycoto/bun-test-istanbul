@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.0-beta.2
+
+- Add `forkCoverage()` to reuse verified prepared instrumentation across fresh
+  invocations without copying raw captures, reports or prior outcomes.
+- Bind forked manifests to the original preparation and donor manifest hash.
+  Every invocation keeps its own run ID, manifest hash and raw directory.
+- Refuse sharing a preparation namespace across invocations in the same global
+  context. Changed source, prepared artifacts, seeds and Bun versions refuse reuse.
+- Verify the installed fork API when preparing and checking release assets.
+
+Fresh v1 manifests remain supported. Forks use schema v2 and require the matching
+collector/preload; v1-only readers reject them. Prepared reuse requires separate
+fresh Bun contexts and does not establish execution completeness or test success.
+
 ## 0.1.0-beta.1
 
 Initial beta for ESM JavaScript/TypeScript and JSX/TSX on Bun 1.4.3.

@@ -69,6 +69,7 @@ const consumerResult = checkConsumer(
   consumer,
   identity.version,
   asset,
+  { verifyFork: true },
 );
 const bytes = readFileSync(asset);
 const manifest: ReleaseManifest = {
